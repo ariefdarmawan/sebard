@@ -4,23 +4,12 @@ import (
 	"os"
 	"strings"
 
+	"time"
+
 	"github.com/eaciit/appconfig"
 	"github.com/eaciit/appserver"
 	"github.com/eaciit/toolkit"
 )
-
-type SebarConfig struct {
-	Host                         string
-	Port                         int
-	Cluster                      string
-	ClusterUserID, ClusterSecret string
-	DataPath                     string
-
-	User   string
-	Secret string
-
-	AuthServer string
-}
 
 type SebarNode struct {
 	Listener *appserver.Server
@@ -29,7 +18,11 @@ type SebarNode struct {
 	Done chan bool
 
 	Config *SebarConfig
-	log    *toolkit.LogEngine
+
+	log       *toolkit.LogEngine
+	closeNode chan bool
+
+	events map[string]func(toolkit.M) *toolkit.Result
 }
 
 func (sn *SebarNode) Close() {
@@ -38,7 +31,7 @@ func (sn *SebarNode) Close() {
 	}
 
 	if sn.Listener != nil {
-		sn.Listener.Log.Info(toolkit.Sprintf("Closing node"))
+		sn.Log().Info("Stop listener on " + sn.Config.HostAddress())
 		sn.Listener.Stop()
 	}
 
@@ -84,6 +77,8 @@ func ParseUrlConnection(url string) (host, userid, password string) {
 
 func (sn *SebarNode) Start() error {
 	listener := new(appserver.Server)
+	sn.Listener = listener
+
 	listener.AllowMultiLogin = true
 	listener.Log = sn.Log()
 	log := sn.Log()
@@ -120,7 +115,6 @@ func (sn *SebarNode) Start() error {
 		os.Exit(100)
 	}
 
-	//sn.Listener = listener
 	/*
 		for {
 			select {
@@ -144,7 +138,27 @@ func (sn *SebarNode) Start() error {
 	return nil
 }
 
+func (sn *SebarNode) SendCloseSignal() {
+	sn.closeNode <- true
+	sn.Close()
+}
+
 func (sn *SebarNode) Wait() {
+	if sn.closeNode == nil {
+		sn.closeNode = make(chan bool)
+	}
+	for {
+		select {
+		case b := <-sn.closeNode:
+			if b == true {
+				return
+			}
+
+		case <-time.After(sn.Config.CheckRate):
+			sn.Event("checkrate", nil)
+			//-- do nothing
+		}
+	}
 }
 
 func joinCluster(sn *SebarNode) error {
@@ -172,6 +186,48 @@ func (sn *SebarNode) ReadConfig(cfgfile string) error {
 	sn.Config.Cluster = cfg.GetDefault("cluster", sn.Config.Cluster).(string)
 	sn.Config.ClusterUserID = cfg.GetDefault("clusteruserid", sn.Config.ClusterUserID).(string)
 	sn.Config.ClusterSecret = cfg.GetDefault("clustersecret", sn.Config.ClusterSecret).(string)
+	sn.Config.CheckRate = time.Duration(toolkit.ToInt(cfg.GetDefault("checkrate", float64(int(1*time.Second))).(float64), toolkit.RoundingAuto))
+
+	return nil
+}
+
+func (sn *SebarNode) AddEvent(eventname string, fnevent func(toolkit.M) *toolkit.Result) {
+	if sn.events == nil {
+		sn.events = make(map[string]func(toolkit.M) *toolkit.Result)
+	}
+
+	eventname = strings.ToLower(strings.Trim(eventname, " "))
+	sn.events[eventname] = fnevent
+}
+
+func (sn *SebarNode) RemoveEvent(eventname string) {
+	if sn.events == nil {
+		return
+	}
+
+	eventname = strings.ToLower(strings.Trim(eventname, " "))
+	delete(sn.events, eventname)
+}
+
+func (sn *SebarNode) Event(eventname string, in toolkit.M) *toolkit.Result {
+	if sn.events == nil {
+		return toolkit.NewResult().SetErrorTxt("Event " + eventname + " is not exists")
+	}
+
+	if in == nil {
+		in = toolkit.M{}
+	}
+	in.Set("server", sn)
+
+	eventnameLower := strings.ToLower(eventname)
+	if event, b := sn.events[eventnameLower]; b == false {
+		return toolkit.NewResult().SetErrorTxt("Event " + eventname + " is not exists")
+	} else {
+		ret := event(in)
+		if ret == nil {
+			ret = toolkit.NewResult()
+		}
+	}
 
 	return nil
 }
