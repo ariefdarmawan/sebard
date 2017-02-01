@@ -9,9 +9,9 @@ type SebarConfig struct {
 	ClusterUserID, ClusterSecret string
 	DataPath                     string
 
-	CheckRate time.Duration
-	User      string
-	Secret    string
+	HealthCheckRate time.Duration
+	User            string
+	Secret          string
 
 	AuthServer string
 }

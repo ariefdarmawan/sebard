@@ -154,8 +154,8 @@ func (sn *SebarNode) Wait() {
 				return
 			}
 
-		case <-time.After(sn.Config.CheckRate):
-			sn.Event("checkrate", nil)
+		case <-time.After(sn.Config.HealthCheckRate):
+			sn.Event("healthcheck", nil)
 			//-- do nothing
 		}
 	}
@@ -186,7 +186,8 @@ func (sn *SebarNode) ReadConfig(cfgfile string) error {
 	sn.Config.Cluster = cfg.GetDefault("cluster", sn.Config.Cluster).(string)
 	sn.Config.ClusterUserID = cfg.GetDefault("clusteruserid", sn.Config.ClusterUserID).(string)
 	sn.Config.ClusterSecret = cfg.GetDefault("clustersecret", sn.Config.ClusterSecret).(string)
-	sn.Config.CheckRate = time.Duration(toolkit.ToInt(cfg.GetDefault("checkrate", float64(int(1*time.Second))).(float64), toolkit.RoundingAuto))
+	sn.Config.HealthCheckRate = time.Duration(toolkit.ToInt(cfg.GetDefault("healthcheckrate",
+		float64(int(1*time.Second))).(float64), toolkit.RoundingAuto))
 
 	return nil
 }

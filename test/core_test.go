@@ -24,7 +24,7 @@ func TestStartHost(t *testing.T) {
 	s1 = new(modules.SebarNode)
 	s1.ReadConfig(host1config)
 	idx := 0
-	s1.AddEvent("checkrate", func(in toolkit.M) *toolkit.Result {
+	s1.AddEvent("healthcheck", func(in toolkit.M) *toolkit.Result {
 		sn := in.Get("server").(*modules.SebarNode)
 		idx++
 		sn.Log().Info(toolkit.Sprintf("Health check %s idx: %d", sn.Config.HostAddress(), idx))
@@ -45,7 +45,7 @@ func TestCloseHostAfterWait(t *testing.T) {
 func TestStartClient(t *testing.T) {
 	s1 = new(modules.SebarNode)
 	s1.ReadConfig(host1config)
-	s1.AddEvent("checkrate", func(in toolkit.M) *toolkit.Result {
+	s1.AddEvent("healthcheck", func(in toolkit.M) *toolkit.Result {
 		sn := in.Get("server").(*modules.SebarNode)
 		sn.Log().Info(toolkit.Sprintf("Health check %s", sn.Config.HostAddress()))
 		return nil
