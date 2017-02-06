@@ -22,7 +22,7 @@ type SebarNode struct {
 	log       *toolkit.LogEngine
 	closeNode chan bool
 
-	events map[string]func(toolkit.M) *toolkit.Result
+	methods map[string]func(toolkit.M) *toolkit.Result
 }
 
 func (sn *SebarNode) Close() {
@@ -155,7 +155,7 @@ func (sn *SebarNode) Wait() {
 			}
 
 		case <-time.After(sn.Config.HealthCheckRate):
-			sn.Event("healthcheck", nil)
+			sn.Call("healthcheck", nil)
 			//-- do nothing
 		}
 	}
@@ -186,33 +186,32 @@ func (sn *SebarNode) ReadConfig(cfgfile string) error {
 	sn.Config.Cluster = cfg.GetDefault("cluster", sn.Config.Cluster).(string)
 	sn.Config.ClusterUserID = cfg.GetDefault("clusteruserid", sn.Config.ClusterUserID).(string)
 	sn.Config.ClusterSecret = cfg.GetDefault("clustersecret", sn.Config.ClusterSecret).(string)
-	sn.Config.HealthCheckRate = time.Duration(toolkit.ToInt(cfg.GetDefault("healthcheckrate",
-		float64(int(1*time.Second))).(float64), toolkit.RoundingAuto))
+	sn.Config.HealthCheckRate = time.Duration(toolkit.ToInt(cfg.GetDefault("healthcheckrate", float64(1000)).(float64), toolkit.RoundingAuto)) * time.Millisecond
 
 	return nil
 }
 
-func (sn *SebarNode) AddEvent(eventname string, fnevent func(toolkit.M) *toolkit.Result) {
-	if sn.events == nil {
-		sn.events = make(map[string]func(toolkit.M) *toolkit.Result)
+func (sn *SebarNode) AddMethod(methodname string, fn func(toolkit.M) *toolkit.Result) {
+	if sn.methods == nil {
+		sn.methods = make(map[string]func(toolkit.M) *toolkit.Result)
 	}
 
-	eventname = strings.ToLower(strings.Trim(eventname, " "))
-	sn.events[eventname] = fnevent
+	methodname = strings.ToLower(strings.Trim(methodname, " "))
+	sn.methods[methodname] = fn
 }
 
-func (sn *SebarNode) RemoveEvent(eventname string) {
-	if sn.events == nil {
+func (sn *SebarNode) RemoveMethod(methodname string) {
+	if sn.methods == nil {
 		return
 	}
 
-	eventname = strings.ToLower(strings.Trim(eventname, " "))
-	delete(sn.events, eventname)
+	methodname = strings.ToLower(strings.Trim(methodname, " "))
+	delete(sn.methods, methodname)
 }
 
-func (sn *SebarNode) Event(eventname string, in toolkit.M) *toolkit.Result {
-	if sn.events == nil {
-		return toolkit.NewResult().SetErrorTxt("Event " + eventname + " is not exists")
+func (sn *SebarNode) Call(methodname string, in toolkit.M) *toolkit.Result {
+	if sn.methods == nil {
+		return toolkit.NewResult().SetErrorTxt("Method " + methodname + " is not exists")
 	}
 
 	if in == nil {
@@ -220,9 +219,9 @@ func (sn *SebarNode) Event(eventname string, in toolkit.M) *toolkit.Result {
 	}
 	in.Set("server", sn)
 
-	eventnameLower := strings.ToLower(eventname)
-	if event, b := sn.events[eventnameLower]; b == false {
-		return toolkit.NewResult().SetErrorTxt("Event " + eventname + " is not exists")
+	methodnameLower := strings.ToLower(methodname)
+	if event, b := sn.methods[methodnameLower]; b == false {
+		return toolkit.NewResult().SetErrorTxt("Event " + methodname + " is not exists")
 	} else {
 		ret := event(in)
 		if ret == nil {
